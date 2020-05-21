@@ -48,7 +48,7 @@ default: all
 
 # 2 builds are implemented: build and buildx !
 # all: check-docker-login build
-all: check-docker-login buildx
+all: check-docker-login buildx uninstall-qemu
 
 build: build-all-images
 
@@ -80,7 +80,7 @@ docker-login-if-possible: check-binaries
 	if [[ ! "${DOCKER_USERNAME}" == "" ]]; then echo "${DOCKER_PASSWORD}" | docker login --username "${DOCKER_USERNAME}" --password-stdin; fi
 
 # See https://docs.docker.com/buildx/working-with-buildx/
-buildx-prepare: check-buildx
+buildx-prepare: install-qemu check-buildx
 	DOCKER_CLI_EXPERIMENTAL=enabled docker context create buildx-multi-arch-context || true
 	DOCKER_CLI_EXPERIMENTAL=enabled docker buildx create buildx-multi-arch-context --name=buildx-multi-arch || true
 	DOCKER_CLI_EXPERIMENTAL=enabled docker buildx use buildx-multi-arch
