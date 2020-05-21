@@ -47,10 +47,10 @@ BUILD_ARCH = $(ARCH)/
 default: all
 
 # 2 builds are implemented: build and buildx !
-# all: check-docker-login build
+# all: check-docker-login build uninstall-qemu
 all: check-docker-login buildx uninstall-qemu
 
-build: build-all-images
+build: build-all-images create-and-push-manifests
 
 # Launch a local build as on circleci, that will call the default target, but inside the 'circleci build and test env'
 circleci-local-build: check-docker-login
@@ -66,7 +66,6 @@ check-binaries:
 	@ echo "DOCKER_REGISTRY: ${DOCKER_REGISTRY}"
 	@ echo "BUILD_DATE: ${BUILD_DATE}"
 	@ echo "VCS_REF: ${VCS_REF}"
-	@ echo "DOCKER_IMAGE_TAGNAME: ${DOCKER_IMAGE_TAGNAME}"
 
 check-buildx: check-binaries
 	# Next line will fail if docker server can't be contacted
@@ -92,7 +91,7 @@ buildx: docker-login-if-possible buildx-prepare checkout
 	cd docker/apache && \
 	DOCKER_CLI_EXPERIMENTAL=enabled docker buildx build --progress plain -f Dockerfile --push --platform "${PLATFORM}" --tag "$(DOCKER_REGISTRY)${DOCKER_IMAGE_NAME}:latest${BETA_VERSION}" --build-arg VERSION="${DOCKER_IMAGE_VERSION}" --build-arg VCS_REF="${VCS_REF}" --build-arg BUILD_DATE="${BUILD_DATE}" .
 
-prepare: check-build install-qemu
+prepare: install-qemu
 
 # Test are qemu based. SHOULD_DO: use `docker buildx bake`. See https://github.com/docker/buildx#buildx-bake-options-target
 install-qemu: check-binaries
@@ -127,6 +126,7 @@ check: check-binaries
         echo '    ARCH=arm64v8 LINUX_ARCH=aarch64 DOCKER_IMAGE_VERSION=5.7.30 make' && \
         exit -3; \
 	fi
+	@ echo "DOCKER_IMAGE_TAGNAME: ${DOCKER_IMAGE_TAGNAME}"
 
 # build-all-one-image-arm32v6 => manifest for arm32v6/php:7.4-apache not found
 build-all-images: prepare build-all-one-image-arm32v7 build-all-one-image-arm64v8 build-all-one-image-amd64
@@ -134,8 +134,9 @@ build-all-images: prepare build-all-one-image-arm32v7 build-all-one-image-arm64v
 # Actually, the 'push' will only be done is DOCKER_USERNAME is set and not empty !
 build-all-one-image: build-one-image test-one-image tag-one-image push-one-image
 
-build-all-one-image-arm32v6: prepare
-	ARCH=arm32v6 LINUX_ARCH=armv6l  make build-all-one-image
+# build-all-one-image-arm32v6 => manifest for arm32v6/php:7.4-apache not found
+# build-all-one-image-arm32v6: prepare
+#	ARCH=arm32v6 LINUX_ARCH=armv6l  make build-all-one-image
 
 build-all-one-image-arm32v7: prepare
 	ARCH=arm32v7 LINUX_ARCH=armv7l  make build-all-one-image
@@ -146,19 +147,18 @@ build-all-one-image-arm64v8: prepare
 build-all-one-image-amd64: prepare
 	ARCH=amd64   LINUX_ARCH=x86_64  make build-all-one-image
 
-create-and-push-manifests: #ideally, should reference 'all-images', but that's boring when we test this script...
-	# biarms/mysql:5.7.30
-	DOCKER_CLI_EXPERIMENTAL=enabled docker manifest create --amend "${DOCKER_IMAGE_NAME}:${DOCKER_IMAGE_VERSION}${BETA_VERSION}" "${DOCKER_IMAGE_NAME}:${MYSQL_VERSION_OTHER_ARCH}-linux-arm32v7${BETA_VERSION}" "${DOCKER_IMAGE_NAME}:${MYSQL_VERSION_OTHER_ARCH}-linux-arm64v8${BETA_VERSION}" "${DOCKER_IMAGE_NAME}:${MYSQL_VERSION_OTHER_ARCH}-linux-amd64${BETA_VERSION}"
-	DOCKER_CLI_EXPERIMENTAL=enabled docker manifest annotate "${DOCKER_IMAGE_NAME}:${DOCKER_IMAGE_VERSION}${BETA_VERSION}" "${DOCKER_IMAGE_NAME}:${MYSQL_VERSION_OTHER_ARCH}-linux-arm32v7${BETA_VERSION}" --os linux --arch arm --variant v7
-	DOCKER_CLI_EXPERIMENTAL=enabled docker manifest annotate "${DOCKER_IMAGE_NAME}:${DOCKER_IMAGE_VERSION}${BETA_VERSION}" "${DOCKER_IMAGE_NAME}:${MYSQL_VERSION_OTHER_ARCH}-linux-arm64v8${BETA_VERSION}" --os linux --arch arm64 --variant v8
-	DOCKER_CLI_EXPERIMENTAL=enabled docker manifest annotate "${DOCKER_IMAGE_NAME}:${DOCKER_IMAGE_VERSION}${BETA_VERSION}" "${DOCKER_IMAGE_NAME}:${MYSQL_VERSION_OTHER_ARCH}-linux-amd64${BETA_VERSION}" --os linux --arch amd64
+create-and-push-manifests: #ideally, should reference 'build-all-images', but that's boring when we test this script...
+	# biarms/phpmyadmin:x.y.z
+	DOCKER_CLI_EXPERIMENTAL=enabled docker manifest create --amend "${DOCKER_IMAGE_NAME}:${DOCKER_IMAGE_VERSION}${BETA_VERSION}" "${DOCKER_IMAGE_NAME}:${DOCKER_IMAGE_VERSION}-linux-arm32v7${BETA_VERSION}" "${DOCKER_IMAGE_NAME}:${DOCKER_IMAGE_VERSION}-linux-arm64v8${BETA_VERSION}" "${DOCKER_IMAGE_NAME}:${DOCKER_IMAGE_VERSION}-linux-amd64${BETA_VERSION}"
+	DOCKER_CLI_EXPERIMENTAL=enabled docker manifest annotate "${DOCKER_IMAGE_NAME}:${DOCKER_IMAGE_VERSION}${BETA_VERSION}" "${DOCKER_IMAGE_NAME}:${DOCKER_IMAGE_VERSION}-linux-arm32v7${BETA_VERSION}" --os linux --arch arm --variant v7
+	DOCKER_CLI_EXPERIMENTAL=enabled docker manifest annotate "${DOCKER_IMAGE_NAME}:${DOCKER_IMAGE_VERSION}${BETA_VERSION}" "${DOCKER_IMAGE_NAME}:${DOCKER_IMAGE_VERSION}-linux-arm64v8${BETA_VERSION}" --os linux --arch arm64 --variant v8
+	DOCKER_CLI_EXPERIMENTAL=enabled docker manifest annotate "${DOCKER_IMAGE_NAME}:${DOCKER_IMAGE_VERSION}${BETA_VERSION}" "${DOCKER_IMAGE_NAME}:${DOCKER_IMAGE_VERSION}-linux-amd64${BETA_VERSION}" --os linux --arch amd64
 	DOCKER_CLI_EXPERIMENTAL=enabled docker manifest push "${DOCKER_IMAGE_NAME}:${DOCKER_IMAGE_VERSION}${BETA_VERSION}"
-	# ${DOCKER_IMAGE_NAME}:latest
-	DOCKER_CLI_EXPERIMENTAL=enabled docker manifest create --amend "${DOCKER_IMAGE_NAME}:latest${BETA_VERSION}" "${DOCKER_IMAGE_NAME}:${MYSQL_VERSION_ARM32V6}-linux-arm32v6${BETA_VERSION}" "${DOCKER_IMAGE_NAME}:${MYSQL_VERSION_OTHER_ARCH}-linux-arm32v7${BETA_VERSION}" "${DOCKER_IMAGE_NAME}:${MYSQL_VERSION_OTHER_ARCH}-linux-arm64v8${BETA_VERSION}" "${DOCKER_IMAGE_NAME}:${MYSQL_VERSION_OTHER_ARCH}-linux-amd64${BETA_VERSION}"
-	DOCKER_CLI_EXPERIMENTAL=enabled docker manifest annotate "${DOCKER_IMAGE_NAME}:latest${BETA_VERSION}" "${DOCKER_IMAGE_NAME}:${MYSQL_VERSION_ARM32V6}-linux-arm32v6${BETA_VERSION}" --os linux --arch arm --variant v6
-	DOCKER_CLI_EXPERIMENTAL=enabled docker manifest annotate "${DOCKER_IMAGE_NAME}:latest${BETA_VERSION}" "${DOCKER_IMAGE_NAME}:${MYSQL_VERSION_OTHER_ARCH}-linux-arm32v7${BETA_VERSION}" --os linux --arch arm --variant v7
-	DOCKER_CLI_EXPERIMENTAL=enabled docker manifest annotate "${DOCKER_IMAGE_NAME}:latest${BETA_VERSION}" "${DOCKER_IMAGE_NAME}:${MYSQL_VERSION_OTHER_ARCH}-linux-arm64v8${BETA_VERSION}" --os linux --arch arm64 --variant v8
-	DOCKER_CLI_EXPERIMENTAL=enabled docker manifest annotate "${DOCKER_IMAGE_NAME}:latest${BETA_VERSION}" "${DOCKER_IMAGE_NAME}:${MYSQL_VERSION_OTHER_ARCH}-linux-amd64${BETA_VERSION}" --os linux --arch amd64
+	# biarms/phpmyadmin:latest
+	DOCKER_CLI_EXPERIMENTAL=enabled docker manifest create --amend "${DOCKER_IMAGE_NAME}:latest${BETA_VERSION}"                  "${DOCKER_IMAGE_NAME}:${DOCKER_IMAGE_VERSION}-linux-arm32v7${BETA_VERSION}" "${DOCKER_IMAGE_NAME}:${DOCKER_IMAGE_VERSION}-linux-arm64v8${BETA_VERSION}" "${DOCKER_IMAGE_NAME}:${DOCKER_IMAGE_VERSION}-linux-amd64${BETA_VERSION}"
+	DOCKER_CLI_EXPERIMENTAL=enabled docker manifest annotate "${DOCKER_IMAGE_NAME}:latest${BETA_VERSION}"                  "${DOCKER_IMAGE_NAME}:${DOCKER_IMAGE_VERSION}-linux-arm32v7${BETA_VERSION}" --os linux --arch arm --variant v7
+	DOCKER_CLI_EXPERIMENTAL=enabled docker manifest annotate "${DOCKER_IMAGE_NAME}:latest${BETA_VERSION}"                  "${DOCKER_IMAGE_NAME}:${DOCKER_IMAGE_VERSION}-linux-arm64v8${BETA_VERSION}" --os linux --arch arm64 --variant v8
+	DOCKER_CLI_EXPERIMENTAL=enabled docker manifest annotate "${DOCKER_IMAGE_NAME}:latest${BETA_VERSION}"                  "${DOCKER_IMAGE_NAME}:${DOCKER_IMAGE_VERSION}-linux-amd64${BETA_VERSION}" --os linux --arch amd64
 	DOCKER_CLI_EXPERIMENTAL=enabled docker manifest push "${DOCKER_IMAGE_NAME}:latest${BETA_VERSION}"
 
 checkout: check-binaries
@@ -181,7 +181,7 @@ test-one-image: check
 tag-one-image: check
 	docker tag $(DOCKER_IMAGE_TAGNAME) $(DOCKER_REGISTRY)$(DOCKER_IMAGE_TAGNAME)
 
-push-one-image: docker-login-if-possible
+push-one-image: check check-docker-login docker-login-if-possible
 	# push only is 'DOCKER_USERNAME' (and hopefully DOCKER_PASSWORD) are set:
 	if [[ ! "${DOCKER_USERNAME}" == "" ]]; then docker push "${DOCKER_IMAGE_TAGNAME}"; fi
 
