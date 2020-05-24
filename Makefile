@@ -31,9 +31,9 @@ default: all
 # 2 builds are implemented: build and buildx (for the fun)
 all: all-build
 
-all-build: check-docker-login test build create-and-push-manifests uninstall-qemu
-
 all-buildx: check-docker-login buildx uninstall-qemu
+
+all-build: check-docker-login test build create-and-push-manifests uninstall-qemu
 
 build: build-all-images
 
@@ -204,7 +204,7 @@ run-smoke-tests: prepare
 
 test-one-image: build-one-image run-smoke-tests
 
-push-one-image: check check-docker-login docker-login-if-possible
+push-one-image: check docker-login-if-possible
 	# push only is 'DOCKER_USERNAME' (and hopefully DOCKER_PASSWORD) are set:
 	if [[ ! "${DOCKER_USERNAME}" == "" ]]; then docker push "${MULTI_ARCH_DOCKER_IMAGE_TAGNAME}"; fi
 
