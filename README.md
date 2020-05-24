@@ -1,4 +1,4 @@
-# Official phpMyAdmin Docker image
+# Brothers in ARMs' phpMyAdmin docker image
 
 ![GitHub release (latest by date)](https://img.shields.io/github/v/release/biarms/phpmyadmin?label=Latest%20Github%20release&logo=Github)
 ![GitHub release (latest SemVer including pre-releases)](https://img.shields.io/github/v/release/biarms/phpmyadmin?include_prereleases&label=Highest%20GitHub%20release&logo=Github&sort=semver)
