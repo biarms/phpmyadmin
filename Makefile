@@ -135,13 +135,13 @@ create-and-push-manifests: #ideally, should reference 'build-all-images', but th
 test-all-images: test-arm32v7 test-arm64v8 test-amd64
 	echo "All tests are OK :)"
 
-test-arm32v7: install-qemu
+test-arm32v7:
 	ARCH=arm32v7 LINUX_ARCH=armv7l DOCKER_IMAGE_VERSION=$(DOCKER_IMAGE_VERSION) make test-one-image
 
-test-arm64v8: install-qemu
+test-arm64v8:
 	ARCH=arm64v8 LINUX_ARCH=aarch64 DOCKER_IMAGE_VERSION=$(DOCKER_IMAGE_VERSION) make test-one-image
 
-test-amd64: install-qemu
+test-amd64:
 	ARCH=amd64 LINUX_ARCH=x86_64 DOCKER_IMAGE_VERSION=$(DOCKER_IMAGE_VERSION) make test-one-image
 
 ## Caution: this Makefile has 'multiple entries', which means that it is 'calling himself'.
