@@ -2,27 +2,22 @@ SHELL = bash
 # .ONESHELL:
 # .SHELLFLAGS = -e
 # See https://www.gnu.org/software/make/manual/html_node/Phony-Targets.html
-.PHONY: default all build circleci-local-build check-binaries check-buildx check-docker-login docker-login-if-possible buildx-prepare \
-        buildx TODO
-
-## Caution: this Makefile has 'multiple entries', which means that it is 'calling himself'.
-# For instance, if you call 'make circleci-local-build':
-# 1. CircleCi cli is invoked
-# 2. After have installed a build environment (inside a docker container), CircleCI will call "make" without parameter, which correspond to a 'make build-all-images' build (because of default target)
-# 3. And 'build-all-images' target will run 4 times the "make all-one-image" for 4 different architecture (arm32v6, arm32v7, arm64v8 and amd64).
+.PHONY: default all build circleci-local-build check-binaries check-buildx check-docker-login docker-login-if-possible buildx-prepare prepare install-qemu uninstall-qemu \
+        buildx check build-all-images build-all-one-image build-all-one-image-arm32v7build-all-one-image-arm64v8 build-all-one-image-amd64 create-and-push-manifests checkout \
+        build-one-image test-one-image tag-one-image push-one-image rmi-one-image rebuild-one-image
 
 # DOCKER_REGISTRY: Nothing, or 'registry:5000/'
-DOCKER_REGISTRY ?=
- # DOCKER_USERNAME: Nothing, or 'biarms'
+DOCKER_REGISTRY ?= docker.io/
+# DOCKER_USERNAME: Nothing, or 'biarms'
 DOCKER_USERNAME ?=
- # DOCKER_PASSWORD: Nothing, or '********'
+# DOCKER_PASSWORD: Nothing, or '********'
 DOCKER_PASSWORD ?=
- # BETA_VERSION: Nothing, or '-beta-123'
+# BETA_VERSION: Nothing, or '-beta-123'
 BETA_VERSION ?=
 DOCKER_IMAGE_NAME = biarms/phpmyadmin
 # Find latest release version on https://github.com/phpmyadmin/phpmyadmin/releases
 DOCKER_IMAGE_VERSION = 5.0.2
-DOCKER_IMAGE_TAGNAME = $(DOCKER_REGISTRY)$(DOCKER_IMAGE_NAME):$(DOCKER_IMAGE_VERSION)-linux-$(ARCH)$(BETA_VERSION)
+DOCKER_IMAGE_TAGNAME = ${DOCKER_REGISTRY}${DOCKER_IMAGE_NAME}:${DOCKER_IMAGE_VERSION}${BETA_VERSION}
 # See https://www.gnu.org/software/make/manual/html_node/Shell-Function.html
 # BUILD_DATE=$(shell date -u +"%Y-%m-%dT%H:%M:%SZ")
 BUILD_DATE=$(shell date -u +"%Y-%m-%d") # rerunning builds are faster with this settings ;)
@@ -73,25 +68,33 @@ check-buildx: check-binaries
 	DOCKER_CLI_EXPERIMENTAL=enabled docker buildx version
 
 check-docker-login: check-binaries
-	@ if [[ "${DOCKER_USERNAME}" == "" ]]; then echo "DOCKER_USERNAME and DOCKER_PASSWORD env variables are mandatory for this kind of build"; exit -1; fi
+	@ if [[ "${DOCKER_USERNAME}" == "" ]]; then \
+	    echo "DOCKER_USERNAME and DOCKER_PASSWORD env variables are mandatory for this kind of build"; \
+	    echo "Consider one of these alternatives: "; \
+	    echo "  - make build"; \
+	    echo "  - DOCKER_USERNAME=biarms DOCKER_PASSWORD=******** BETA_VERSION='-local-test-pushed-on-docker-io' make"; \
+	    echo "  - DOCKER_USERNAME=biarms DOCKER_PASSWORD=******** make circleci-local-build"; \
+	    exit -1; \
+	  fi
 
 docker-login-if-possible: check-binaries
 	if [[ ! "${DOCKER_USERNAME}" == "" ]]; then echo "${DOCKER_PASSWORD}" | docker login --username "${DOCKER_USERNAME}" --password-stdin; fi
 
 # See https://docs.docker.com/buildx/working-with-buildx/
-buildx-prepare: install-qemu check-buildx
+buildx-prepare: prepare install-qemu check-buildx
 	DOCKER_CLI_EXPERIMENTAL=enabled docker context create buildx-multi-arch-context || true
 	DOCKER_CLI_EXPERIMENTAL=enabled docker buildx create buildx-multi-arch-context --name=buildx-multi-arch || true
 	DOCKER_CLI_EXPERIMENTAL=enabled docker buildx use buildx-multi-arch
 
 buildx: docker-login-if-possible buildx-prepare checkout
-	DOCKER_CLI_EXPERIMENTAL=enabled docker buildx version
 	cd docker/apache && \
 	DOCKER_CLI_EXPERIMENTAL=enabled docker buildx build --progress plain -f Dockerfile --push --platform "${PLATFORM}" --tag "$(DOCKER_REGISTRY)${DOCKER_IMAGE_NAME}:${DOCKER_IMAGE_VERSION}${BETA_VERSION}" --build-arg VERSION="${DOCKER_IMAGE_VERSION}" --build-arg VCS_REF="${VCS_REF}" --build-arg BUILD_DATE="${BUILD_DATE}" .
 	cd docker/apache && \
 	DOCKER_CLI_EXPERIMENTAL=enabled docker buildx build --progress plain -f Dockerfile --push --platform "${PLATFORM}" --tag "$(DOCKER_REGISTRY)${DOCKER_IMAGE_NAME}:latest${BETA_VERSION}" --build-arg VERSION="${DOCKER_IMAGE_VERSION}" --build-arg VCS_REF="${VCS_REF}" --build-arg BUILD_DATE="${BUILD_DATE}" .
 
 prepare: install-qemu
+	# Debug info
+	@ echo "DOCKER_IMAGE_TAGNAME: ${DOCKER_IMAGE_TAGNAME}"
 
 # Test are qemu based. SHOULD_DO: use `docker buildx bake`. See https://github.com/docker/buildx#buildx-bake-options-target
 install-qemu: check-binaries
