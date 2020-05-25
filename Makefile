@@ -16,7 +16,8 @@ DOCKER_PASSWORD ?=
 BETA_VERSION ?=
 DOCKER_IMAGE_NAME = biarms/phpmyadmin
 # Find latest release version on https://github.com/phpmyadmin/phpmyadmin/releases
-DOCKER_IMAGE_VERSION = 5.0.2
+SOFTWARE_VERSION = 5.0.1
+DOCKER_IMAGE_VERSION = 5.0.1
 DOCKER_IMAGE_TAGNAME = ${DOCKER_REGISTRY}${DOCKER_IMAGE_NAME}:${DOCKER_IMAGE_VERSION}${BETA_VERSION}
 # See https://www.gnu.org/software/make/manual/html_node/Shell-Function.html
 # BUILD_DATE=$(shell date -u +"%Y-%m-%dT%H:%M:%SZ")
@@ -89,15 +90,18 @@ buildx-prepare: install-qemu check-buildx
 	@ echo "DOCKER_IMAGE_TAGNAME: ${DOCKER_IMAGE_TAGNAME}"
 
 checkout: check-binaries
-	rm -rf docker || true
-	git clone https://github.com/phpmyadmin/docker
-	cd docker && git checkout tags/$(DOCKER_IMAGE_VERSION)
+	# Checkout original source code. Don't fail if local repo already exists
+	git clone https://github.com/phpmyadmin/docker "git-src/" || true
+	# Revert any modifications done in this folder (typically, the update of the original Dockerfile)
+	cd "git-src/" && git checkout -- *
+	# Checkout the tag we want to build
+	cd "git-src/" && git checkout tags/$(DOCKER_IMAGE_VERSION)
 
 buildx: docker-login-if-possible buildx-prepare checkout
-	cd docker/apache && \
-	DOCKER_CLI_EXPERIMENTAL=enabled docker buildx build --progress plain -f Dockerfile --push --platform "${PLATFORM}" --tag "$(DOCKER_REGISTRY)${DOCKER_IMAGE_NAME}:${DOCKER_IMAGE_VERSION}${BETA_VERSION}" --build-arg VERSION="${DOCKER_IMAGE_VERSION}" --build-arg VCS_REF="${VCS_REF}" --build-arg BUILD_DATE="${BUILD_DATE}" .
-	cd docker/apache && \
-	DOCKER_CLI_EXPERIMENTAL=enabled docker buildx build --progress plain -f Dockerfile --push --platform "${PLATFORM}" --tag "$(DOCKER_REGISTRY)${DOCKER_IMAGE_NAME}:latest${BETA_VERSION}" --build-arg VERSION="${DOCKER_IMAGE_VERSION}" --build-arg VCS_REF="${VCS_REF}" --build-arg BUILD_DATE="${BUILD_DATE}" .
+	cd "git-src/apache" && \
+	DOCKER_CLI_EXPERIMENTAL=enabled docker buildx build --progress plain -f Dockerfile --push --platform "${PLATFORM}" --tag "$(DOCKER_REGISTRY)${DOCKER_IMAGE_NAME}:${DOCKER_IMAGE_VERSION}${BETA_VERSION}" --build-arg SOFTWARE_VERSION="${SOFTWARE_VERSION}" --build-arg VCS_REF="${VCS_REF}" --build-arg BUILD_DATE="${BUILD_DATE}" .
+	cd "git-src/apache" && \
+	DOCKER_CLI_EXPERIMENTAL=enabled docker buildx build --progress plain -f Dockerfile --push --platform "${PLATFORM}" --tag "$(DOCKER_REGISTRY)${DOCKER_IMAGE_NAME}:latest${BETA_VERSION}" --build-arg SOFTWARE_VERSION="${SOFTWARE_VERSION}" --build-arg VCS_REF="${VCS_REF}" --build-arg BUILD_DATE="${BUILD_DATE}" .
 
 # build-all-one-image-arm32v6 => manifest for arm32v6/php:7.4-apache not found
 build-all-images: build-all-one-image-arm32v7 build-all-one-image-arm64v8 build-all-one-image-amd64
@@ -191,11 +195,10 @@ check: check-binaries
 prepare: check install-qemu
 
 build-one-image: checkout prepare
-	cp docker/apache/Dockerfile docker/apache/Dockerfile-orig
-	cp Dockerfile docker/apache/.
-	cd docker/apache && \
-	docker build -t "${MULTI_ARCH_DOCKER_IMAGE_TAGNAME}" --build-arg VERSION="${DOCKER_IMAGE_VERSION}" --build-arg VCS_REF="${VCS_REF}" --build-arg BUILD_DATE="${BUILD_DATE}" --build-arg BUILD_ARCH="${BUILD_ARCH}" ${DOCKER_FILE} .
-	rm -rf docker
+	cp "git-src//apache/Dockerfile" "git-src//apache/Dockerfile-orig"
+	cp "Dockerfile" "git-src//apache/."
+	cd "git-src//apache" && \
+	docker build -t "${MULTI_ARCH_DOCKER_IMAGE_TAGNAME}" --build-arg SOFTWARE_VERSION="${SOFTWARE_VERSION}" --build-arg VCS_REF="${VCS_REF}" --build-arg BUILD_DATE="${BUILD_DATE}" --build-arg BUILD_ARCH="${BUILD_ARCH}" ${DOCKER_FILE} .
 
 run-smoke-tests: prepare
 	# Smoke tests:
