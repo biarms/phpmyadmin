@@ -67,8 +67,8 @@ RUN set -ex; \
     } > $PHP_INI_DIR/conf.d/phpmyadmin-misc.ini
 
 # Calculate download URL
-ENV VERSION 5.0.2
-ENV URL https://files.phpmyadmin.net/phpMyAdmin/${VERSION}/phpMyAdmin-${VERSION}-all-languages.tar.xz
+ARG SOFTWARE_VERSION
+ENV URL https://files.phpmyadmin.net/phpMyAdmin/${SOFTWARE_VERSION}/phpMyAdmin-${SOFTWARE_VERSION}-all-languages.tar.xz
 ARG BUILD_DATE
 ARG VCS_REF
 
@@ -79,7 +79,7 @@ LABEL maintainer="The phpMyAdmin Team <developers@phpmyadmin.net>" \
     org.opencontainers.image.vendor="phpMyAdmin" \
     org.opencontainers.image.documentation="https://github.com/phpmyadmin/docker#readme" \
     org.opencontainers.image.licenses="GPL-2.0-only" \
-    org.opencontainers.image.version="${VERSION}" \
+    org.opencontainers.image.version="${SOFTWARE_VERSION}" \
     org.opencontainers.image.url="https://github.com/phpmyadmin/docker#readme" \
     org.opencontainers.image.source="https://github.com/phpmyadmin/docker.git" \
     org.opencontainers.image.revision="${VCS_REF}" \
